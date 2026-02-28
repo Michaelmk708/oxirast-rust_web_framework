@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = [
+    "oxirast-cli",
+    "oxirast-core", "oxirast-demo",
+    "oxirast-parser",
+    "oxirast-demo"
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Michael <michaelkinuthia708@gmail.com>"]

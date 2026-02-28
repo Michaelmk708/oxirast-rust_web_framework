@@ -1,0 +1,1 @@
+/home/michael/Desktop/oxirast/target/wasm32-unknown-unknown/debug/oxirast-demo.wasm: /home/michael/Desktop/oxirast/oxirast-core/src/lib.rs /home/michael/Desktop/oxirast/oxirast-demo/src/main.rs /home/michael/Desktop/oxirast/oxirast-parser/src/lib.rs

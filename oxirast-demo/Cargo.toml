@@ -1,0 +1,14 @@
+[package]
+name = "oxirast-demo"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# ADD THIS BLOCK: Tell Rust to compile this as a WebAssembly Library
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+oxirast-core = { path = "../oxirast-core" }
+oxirast-parser = { path = "../oxirast-parser" }
+wasm-bindgen = "0.2"

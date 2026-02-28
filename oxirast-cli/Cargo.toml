@@ -1,0 +1,13 @@
+[package]
+name = "oxirast-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+tokio = { version = "1.36", features = ["full"] }
+axum = { version = "0.7", features = ["ws"] }
+notify = "6.1"
+futures = "0.3"
+# Add this line to serve static files!
+tower-http = { version = "0.5", features = ["fs"] }

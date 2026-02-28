@@ -1,0 +1,35 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #1e1e1e;
+    color: black;
+    display: flex;
+    justify-content: center;
+    padding-top: 5rem;
+}
+
+.react-card {
+    background-color: #2d2d2d;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    width: 350px;
+    text-align: center;
+}
+
+.input-field {
+    width: 90%;
+    padding: 0.8rem;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 6px;
+    border: 1px solid #444;
+    background-color: #1e1e1e;
+    color: white;
+    font-size: 1rem;
+}
+
+.live-text {
+    color: #61dafb; /* React Blue! */
+    font-weight: bold;
+    font-size: 1.2rem;
+}
