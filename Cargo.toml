@@ -1,10 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "oxirast-cli",
-    "oxirast-core", "oxirast-demo",
+  "oxirast-core",
     "oxirast-parser",
-    "oxirast-demo"
+    "oxirast-cli"
 ]
 
 [workspace.package]

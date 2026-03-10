@@ -1030,16 +1030,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oxirast-demo"
-version = "0.1.0"
-dependencies = [
- "oxirast-core",
- "oxirast-parser",
- "serde",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "oxirast-parser"
 version = "0.1.0"
 dependencies = [
