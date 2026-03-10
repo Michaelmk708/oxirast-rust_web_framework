@@ -7,7 +7,7 @@ use axum::{
     Router,
 };
 use notify::{RecursiveMode, Watcher};
-use std::{env, fs, path::Path, process::Command, sync::Arc}; // ADDED env and fs here
+use std::{env, fs, path::Path, process::Command, sync::Arc};
 use tokio::sync::broadcast;
 use tower_http::services::ServeDir;
 
@@ -23,7 +23,8 @@ const INDEX_HTML: &str = r#"
     <div id="root"></div>
 
     <script type="module">
-        import init from '/dist/oxirast_demo.js';
+        // FIX 1: The browser now always looks for 'app.js' regardless of the project name!
+        import init from '/dist/app.js';
         
         init().then(() => {
             console.log("🚀 Oxirast Framework Initialized!");
@@ -44,20 +45,35 @@ const INDEX_HTML: &str = r#"
 fn build_project() {
     println!("⚙️  Compiling Oxirast App to WebAssembly...");
     
+    // FIX 2: Removed "-p oxirast-demo". It now builds whatever directory it is currently running in.
     let build_status = Command::new("cargo")
-        .args(["build", "-p", "oxirast-demo", "--target", "wasm32-unknown-unknown"])
+        .args(["build", "--target", "wasm32-unknown-unknown"])
         .status()
         .expect("Failed to run cargo build");
 
     if build_status.success() {
         println!("📦 Generating JavaScript bindings...");
         
+        // FIX 3: Read Cargo.toml to dynamically find the project's name
+        let cargo_toml = fs::read_to_string("Cargo.toml").expect("Cargo.toml not found! Are you in the right directory?");
+        let mut proj_name = String::new();
+        for line in cargo_toml.lines() {
+            if line.trim().starts_with("name =") {
+                // Extracts the name and converts hyphens to underscores (Cargo does this automatically for .wasm files)
+                proj_name = line.split('"').nth(1).unwrap_or("").replace("-", "_");
+                break;
+            }
+        }
+        
+        let wasm_path = format!("target/wasm32-unknown-unknown/debug/{}.wasm", proj_name);
+
         let bindgen_output = Command::new("wasm-bindgen")
             .args([
                 "--out-dir", "dist",
+                "--out-name", "app", // FIX 4: Force the output file to be named "app"
                 "--target", "web",
                 "--no-typescript",
-                "target/wasm32-unknown-unknown/debug/oxirast_demo.wasm" 
+                &wasm_path 
             ])
             .output()
             .expect("Failed to execute wasm-bindgen tool.");
@@ -157,14 +173,13 @@ h1 { color: #ff4500; }
     fs::write(format!("{}/public/style.css", project_name), index_css).unwrap();
 
     println!("✅ Project {} created successfully!", project_name);
-    println!("👉 Next steps:\n  cd {}\n  oxirast-cli dev", project_name);
+    println!("👉 Next steps:\n  cd {}\n  oxirast-cli", project_name);
 }
 
 
 #[tokio::main]
 async fn main() {
     // --- THE CLI ROUTER ---
-    // This intercepts commands from the terminal before starting the server.
     let args: Vec<String> = env::args().collect();
     
     if args.len() >= 3 && args[1] == "init" {
@@ -180,7 +195,8 @@ async fn main() {
     let (tx, _rx) = broadcast::channel::<String>(100);
     let app_state = Arc::new(tx.clone());
 
-    let watch_dir = Path::new("oxirast-demo/src");
+    // FIX 5: Watch the generic "src" folder, not "oxirast-demo/src"
+    let watch_dir = Path::new("src");
     if !watch_dir.exists() {
         std::fs::create_dir_all(watch_dir).unwrap();
     }

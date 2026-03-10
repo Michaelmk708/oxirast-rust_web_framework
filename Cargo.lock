@@ -1009,7 +1009,7 @@ dependencies = [
 
 [[package]]
 name = "oxirast-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "futures",
@@ -1020,7 +1020,7 @@ dependencies = [
 
 [[package]]
 name = "oxirast-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "reqwest",
  "serde",
@@ -1031,7 +1031,7 @@ dependencies = [
 
 [[package]]
 name = "oxirast-parser"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
