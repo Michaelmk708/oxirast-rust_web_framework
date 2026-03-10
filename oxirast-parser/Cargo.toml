@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 description = "A fast, fine-grained WebAssembly frontend framework for Rust."
 license = "MIT"
+repository = "https://github.com/Michaelmk708/oxirast-rust_web_framework"
 
 [lib]
 # This line is absolutely crucial. It tells the Rust compiler 
