@@ -33,3 +33,8 @@ body {
     font-weight: bold;
     font-size: 1.2rem;
 }
+.skills{
+    border-width: 10px;
+    background-color: aqua;
+
+}

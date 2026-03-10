@@ -42,6 +42,7 @@ struct HtmlElement {
 enum HtmlNode {
     Element(HtmlElement),
     Text(LitStr),
+    Expression(Expr), 
 }
 
 impl Parse for HtmlNode {
@@ -58,11 +59,7 @@ impl Parse for HtmlNode {
             if input.peek(Token![/]) {
                 input.parse::<Token![/]>()?;
                 input.parse::<Token![>]>()?;
-                return Ok(HtmlNode::Element(HtmlElement {
-                    tag,
-                    attributes,
-                    children: Vec::new(),
-                }));
+                return Ok(HtmlNode::Element(HtmlElement { tag, attributes, children: Vec::new() }));
             }
 
             input.parse::<Token![>]>()?;
@@ -78,13 +75,15 @@ impl Parse for HtmlNode {
             input.parse::<Token![>]>()?;
 
             if tag != close_tag {
-                return Err(syn::Error::new(
-                    close_tag.span(),
-                    format!("Mismatched tag. Expected `{}`, found `{}`", tag, close_tag),
-                ));
+                return Err(syn::Error::new(close_tag.span(), format!("Mismatched tag. Expected `{}`, found `{}`", tag, close_tag)));
             }
 
             Ok(HtmlNode::Element(HtmlElement { tag, attributes, children }))
+            
+        } else if input.peek(syn::token::Brace) {
+            let content;
+            syn::braced!(content in input);
+            Ok(HtmlNode::Expression(content.parse()?))
         } else {
             let text: LitStr = input.parse()?;
             Ok(HtmlNode::Text(text))
@@ -95,63 +94,76 @@ impl Parse for HtmlNode {
 fn generate_node(node: &HtmlNode) -> proc_macro2::TokenStream {
     match node {
         HtmlNode::Text(text) => {
-            quote! {
-                oxirast_core::document().create_text_node(#text)
-            }
+            quote! { oxirast_core::VNode::text(#text) }
+        },
+        HtmlNode::Expression(expr) => {
+            quote! { oxirast_core::VNode::text(&(#expr).to_string()) }
         },
         HtmlNode::Element(el) => {
             let tag = el.tag.to_string();
-            
-            // THE COMPONENT UPGRADE: Check if it starts with an uppercase letter
             let is_custom_component = tag.chars().next().unwrap().is_ascii_uppercase();
 
             if is_custom_component {
                 let component_name = &el.tag;
-                // If it's a custom component like <Login />, call the Rust function!
+                
+                if el.attributes.is_empty() {
+                    return quote! {
+                        #component_name()
+                    };
+                }
+
+                let props_struct_name = syn::Ident::new(&format!("{}Props", component_name), component_name.span());
+                
+                let props_fields: Vec<_> = el.attributes.iter().map(|attr| {
+                    let key = &attr.key;
+                    match &attr.value {
+                        AttrValue::Literal(lit) => quote! { #key: String::from(#lit) },
+                        AttrValue::Expression(expr) => quote! { #key: #expr },
+                    }
+                }).collect();
+
                 return quote! {
-                    #component_name()
+                    #component_name(#props_struct_name {
+                        #(#props_fields),*
+                    })
                 };
             }
 
-            // STANDARD HTML ELEMENTS: Build the DOM node
-            let attrs: Vec<_> = el.attributes.iter().map(|attr| {
-                // RESTORED: This is the missing `key` declaration
+            let mut attr_calls = Vec::new();
+
+            for attr in &el.attributes {
                 let key = attr.key.to_string(); 
                 
                 match &attr.value {
-                    AttrValue::Literal(lit) => quote! { 
-                        __el.set_attribute(#key, #lit).unwrap(); 
+                    AttrValue::Literal(lit) => {
+                        attr_calls.push(quote! { .attr(#key, #lit) });
                     },
                     AttrValue::Expression(expr) => {
-                        if key.starts_with("on_") {
+                        // THE MACRO UPGRADE: Catch bind_text and compile it into .bind_text()
+                        if key == "bind_text" {
+                            attr_calls.push(quote! { .bind_text(#expr) });
+                        } else if key.starts_with("on_") {
                             let event_name = key.replace("on_", "");
-                            quote! { 
-                                oxirast_core::on_event(&__el, #event_name, #expr); 
-                            }
+                            attr_calls.push(quote! { 
+                                .on(#event_name, std::rc::Rc::new(std::cell::RefCell::new(Box::new(#expr)))) 
+                            });
                         } else {
-                            quote! { 
-                                __el.set_attribute(#key, &#expr.to_string()).unwrap(); 
-                            }
+                            attr_calls.push(quote! { .attr(#key, &(#expr).to_string()) });
                         }
                     }, 
                 }
-            }).collect();
+            }
 
             let children: Vec<_> = el.children.iter().map(|child| {
                 let child_code = generate_node(child);
-                quote! {
-                    let __child: oxirast_core::web_sys::Node = #child_code.into();
-                    __el.append_child(&__child).unwrap();
-                }
+                quote! { .child(#child_code) }
             }).collect();
 
             quote! {
-                {
-                    let __el: oxirast_core::web_sys::Element = oxirast_core::document().create_element(#tag).unwrap();
-                    #(#attrs)*
-                    #(#children)*
-                    __el
-                }
+                oxirast_core::VNode::element(#tag)
+                #(#attr_calls)*
+                #(#children)*
+                .build()
             }
         }
     }

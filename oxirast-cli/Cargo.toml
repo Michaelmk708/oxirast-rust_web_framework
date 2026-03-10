@@ -3,6 +3,8 @@ name = "oxirast-cli"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
+description = "A fast, fine-grained WebAssembly frontend framework for Rust."
+license = "MIT"
 
 [dependencies]
 tokio = { version = "1.36", features = ["full"] }

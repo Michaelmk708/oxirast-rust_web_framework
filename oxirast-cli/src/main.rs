@@ -1,11 +1,13 @@
 use axum::{
-    extract::ws::{Message, WebSocket, WebSocketUpgrade},
-    response::{Html, IntoResponse},
+    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, Request},
+    http::{header, HeaderValue},
+    middleware::{self, Next},
+    response::{Html, IntoResponse, Response},
     routing::get,
     Router,
 };
 use notify::{RecursiveMode, Watcher};
-use std::{path::Path, process::Command, sync::Arc};
+use std::{env, fs, path::Path, process::Command, sync::Arc}; // ADDED env and fs here
 use tokio::sync::broadcast;
 use tower_http::services::ServeDir;
 
@@ -18,6 +20,8 @@ const INDEX_HTML: &str = r#"
     <link rel="stylesheet" href="/public/style.css">
 </head>
 <body>
+    <div id="root"></div>
+
     <script type="module">
         import init from '/dist/oxirast_demo.js';
         
@@ -70,8 +74,105 @@ fn build_project() {
     }
 }
 
+// Middleware to stamp the cache-killing headers on every single file
+async fn disable_cache(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0"));
+    headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    headers.insert(header::EXPIRES, HeaderValue::from_static("0"));
+    response
+}
+
+// ==========================================
+// THE SCAFFOLDING ENGINE (oxirast init)
+// ==========================================
+fn scaffold_project(project_name: &str) {
+    println!("🚀 Initializing new Oxirast project: {}", project_name);
+
+    // 1. Create the Directory Tree
+    fs::create_dir_all(format!("{}/src/pages", project_name)).unwrap();
+    fs::create_dir_all(format!("{}/public/assets", project_name)).unwrap();
+
+    // 2. Generate Cargo.toml
+    let cargo_toml = format!(
+r#"[package]
+name = "{}"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+oxirast-core = "0.1.0"
+oxirast-parser = "0.1.0"
+wasm-bindgen = "0.2"
+serde = {{ version = "1.0", features = ["derive"] }}
+"#, project_name);
+    fs::write(format!("{}/Cargo.toml", project_name), cargo_toml).unwrap();
+
+    // 3. Generate the Entry Point (src/lib.rs)
+    let lib_rs = r#"use oxirast_core::{mount_to_body, render_vnode, VNode};
+use oxirast_parser::rsx;
+
+#[allow(non_snake_case)]
+pub fn App() -> VNode {
+    rsx!(
+        <div class="container">
+            <h1>"Welcome to Oxirast"</h1>
+            <p>"Your WebAssembly framework is ready."</p>
+        </div>
+    )
+}
+
+#[wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn main() {
+    let app = App();
+    mount_to_body(&render_vnode(&app));
+}
+"#;
+    fs::write(format!("{}/src/lib.rs", project_name), lib_rs).unwrap();
+
+    // 4. Generate the Public Assets (CSS)
+    let index_css = r#"body {
+    font-family: system-ui, sans-serif;
+    background-color: #f4f4f9;
+    color: #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+.container {
+    text-align: center;
+    padding: 2rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+h1 { color: #ff4500; }
+"#;
+    fs::write(format!("{}/public/style.css", project_name), index_css).unwrap();
+
+    println!("✅ Project {} created successfully!", project_name);
+    println!("👉 Next steps:\n  cd {}\n  oxirast-cli dev", project_name);
+}
+
+
 #[tokio::main]
 async fn main() {
+    // --- THE CLI ROUTER ---
+    // This intercepts commands from the terminal before starting the server.
+    let args: Vec<String> = env::args().collect();
+    
+    if args.len() >= 3 && args[1] == "init" {
+        scaffold_project(&args[2]);
+        return; // Important: Exit the program so the server doesn't start!
+    }
+    // ----------------------
+
     println!("🔥 Starting Oxirast Dev Server...");
 
     build_project();
@@ -99,13 +200,12 @@ async fn main() {
         loop { tokio::time::sleep(std::time::Duration::from_secs(1)).await; }
     });
 
-    // Here is the Router safely tucked inside the main function!
     let app = Router::new()
-        .route("/", get(|| async { Html(INDEX_HTML) }))
         .route("/ws", get(ws_handler))
         .nest_service("/dist", ServeDir::new("dist"))
-        // Exposing the public folder to the browser
         .nest_service("/public", ServeDir::new("public")) 
+        .fallback(get(|| async { Html(INDEX_HTML) }))
+        .layer(middleware::from_fn(disable_cache)) 
         .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();

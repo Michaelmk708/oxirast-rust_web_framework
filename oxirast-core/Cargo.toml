@@ -3,14 +3,15 @@ name = "oxirast-core"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
+description = "A fast, fine-grained WebAssembly frontend framework for Rust."
+license = "MIT"
 
 [dependencies]
-# The bridge between Rust and JavaScript
 wasm-bindgen = "0.2"
-# Direct access to JavaScript types (like Arrays and Functions)
-js-sys = "0.3"
+wasm-bindgen-futures = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+reqwest = { version = "0.11", features = ["json"] }
 
-# Access to the browser's DOM APIs
 [dependencies.web-sys]
 version = "0.3"
 features = [
@@ -19,8 +20,12 @@ features = [
     "HtmlElement",
     "HtmlInputElement",
     "Node",
+    "NodeList",
     "Window",
     "Event",
     "EventTarget",
-    "Text", # <-- Added this!
+    "Text",
+    "History",  
+    "Location", 
+    "console",  
 ]
