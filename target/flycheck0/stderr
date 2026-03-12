@@ -1,7 +1,0 @@
-error: cannot extend value of type string with a dotted key
- --> oxirast-core/Cargo.toml:4:1
-  |
-4 | version.workspace = true
-  | ^^^^^^^
-error: failed to load manifest for workspace member `/home/michael/Desktop/oxirast/oxirast-core`
-referenced by workspace at `/home/michael/Desktop/oxirast/Cargo.toml`
