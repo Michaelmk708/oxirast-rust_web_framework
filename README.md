@@ -1,229 +1,86 @@
-
-# Oxirast
-
-**The fine-grained, lightning-fast WebAssembly framework for Rust.**
-
-
-## Why Oxirast?
-
-Most frontend frameworks rely on a **Virtual DOM** — when state changes, they re-render your entire component, diff a new VDOM tree against the old one, and patch the real DOM. This diffing step is expensive and grows with your component tree.
-
-Oxirast takes a fundamentally different approach: **Fine-Grained Reactivity**.
-
-State lives in **Signals**. When a Signal mutates, Oxirast does not re-render the component. It reaches directly into the live browser DOM and surgically updates *only* the specific text node or attribute that depends on that Signal. The rest of your tree is never touched.
-
-| | Virtual DOM (React) | Fine-Grained (Oxirast) |
-|---|---|---|
-| State change triggers | Full component re-render | Targeted Signal update only |
-| DOM update method | Diff + patch VDOM tree | Direct DOM mutation |
-| Re-render overhead | O(component size) | O(1) per subscriber |
-| Memory model | GC-managed heap (JS) | Rust ownership + Wasm GC |
-| Language | JavaScript / TypeScript | Rust → WebAssembly |
-
----
-
-## Features
-
-- 🎯 **True Fine-Grained Reactivity** — Signals mutate, DOM updates. No re-renders. No diffing.
-- 🦀 **100% Rust** — Write your entire frontend in one language with full type safety.
-- 📝 **Declarative UI via `rsx!`** — HTML-like syntax compiled to optimised Wasm at build time.
-- 🔀 **Built-in SPA Router** — History-based client-side routing with automatic memory cleanup.
-- ⚡ **Zero-Config CLI** — Scaffold, compile, and hot-reload with a single command.
-- 🧹 **Automatic Memory Management** — Wasm-to-JS garbage collector purges orphaned closures and Signals on page transitions, preventing memory leaks.
-
----
-
-## Workspace Structure
-
-This repository is a Cargo workspace containing three crates:
-```
-oxirast/
-├── oxirast-core/      # Runtime engine — Signals, VNode, Router, DOM bindings
-├── oxirast-parser/    # Compile-time procedural macro engine — rsx! transformation
-└── oxirast-cli/       # Developer CLI — scaffold, serve with hot-reload
-```
-
-### `oxirast-core`
-The runtime engine. Contains the Virtual DOM, the `Signal<T>` reactivity system, the `Router`, async fetch hooks (`use_fetch`), the Context API (`provide_context` / `use_context`), and all `wasm-bindgen` DOM bindings.
-
-### `oxirast-parser`
-The compile-time macro engine. Transforms your `rsx!` HTML-like syntax into optimised Rust/VNode instructions. Handles `bind_text` directive wiring and `on_*` event listener compilation.
-
-### `oxirast-cli`
-The developer toolkit. A globally installed binary that scaffolds new projects and runs a hot-reloading development server at `http://localhost:3000`.
-
----
-
-## Quick Start
-
-**1. Install the CLI**
-```bash
-cargo install oxirast-cli
-```
-
-**2. Scaffold a new project**
-```bash
-oxirast-cli init my_app
-cd my_app
-```
-
-**3. Start the dev server**
-```bash
-oxirast-cli
-```
-
-Your app is now compiling to WebAssembly and running at `http://localhost:3000` with hot-reloading enabled.
-
----
-
-## Usage
-
-### Components & the `rsx!` Macro
-```rust
-use oxirast_core::VNode;
-use oxirast_parser::rsx;
-
-#[allow(non_snake_case)]
-pub fn WelcomeCard() -> VNode {
-    rsx!(
-        <div class="card">
-            <h1>"Welcome to Oxirast"</h1>
-            <p>"Compiled to WebAssembly."</p>
-        </div>
-    )
-}
-```
-
-### Reactivity with Signals
-```rust
-use oxirast_core::{use_state, VNode};
+Oxirast 🦀⚡The fine-grained, lightning-fast, Web3-native WebAssembly framework for Rust.Why Oxirast?Most frontend frameworks rely on a Virtual DOM — when state changes, they re-render your entire component, diff a new VDOM tree against the old one, and patch the real DOM. This diffing step is expensive and grows with your component tree.Oxirast takes a fundamentally different approach: Fine-Grained Reactivity.State lives in Signals. When a Signal mutates, Oxirast does not re-render the component. It reaches directly into the live browser DOM and surgically updates only the specific text node or attribute that depends on that Signal. The rest of your tree is never touched.FeatureVirtual DOM FrameworksOxirast (v1.0)State change triggersFull component re-renderTargeted Signal update onlyDOM update methodDiff + patch VDOM treeDirect DOM mutationRe-render overheadO(component size)O(1) per subscriberArchitectureClient-heavy SPAIsomorphic (SSR + True Hydration)Web3 NativeRequires heavy JS bridgingBuilt-in use_wallet hooksLanguageJavaScript / TypeScript100% Rust → WebAssembly🔥 Features (v1.0.0)🎯 True Fine-Grained Reactivity — bind_text, bind_attr, and bind_show. No re-renders. No diffing.🦀 Isomorphic Architecture (SSR) — Write once, render to HTML on your Axum/Actix backend, and truly hydrate on the client.⛓️ Web3 Wallet Engine — Built-in, zero-JS-config hooks to instantly connect MetaMask (EVM) and Phantom (Solana).🔀 Enterprise Routing — Dynamic parameters (/user/:id), query parsing (?sort=asc), nested wildcard routing, and Route Guards for instant auth protection.🛡️ Zero-Day Crash Protection — Built-in React-style "Red Screen of Death" Error Boundaries intercept Rust panics to prevent silent Wasm crashes.🎨 Tailwind CSS Auto-Compiler — The CLI detects tailwind.config.js and automatically compiles your utility classes on the fly.⚡ Production-Ready CLI — Scaffold templates, hot-reload, audit dependencies (cargo audit), and aggressively compress Wasm binaries (wasm-opt) with one command.🚀 Quick Start1. Install the CLIBashcargo install oxirast-cli
+2. Scaffold a new project (with Tailwind CSS!)Bashoxirast-cli init my_dapp --template tailwind
+cd my_dapp
+3. Run Security Audit & Start Dev ServerBashoxirast-cli audit
+oxirast-cli serve
+Your app is now compiling to WebAssembly, auto-compiling Tailwind, and running at http://localhost:3000 with hot-reloading enabled!🛠️ UsageComponents & Fine-Grained Reactivity (rsx!)Update attributes, text, and CSS classes instantly without re-rendering the component.Rustuse oxirast_core::{use_state, use_memo, VNode};
 use oxirast_parser::rsx;
 
 #[allow(non_snake_case)]
 pub fn Counter() -> VNode {
-    let count        = use_state(0);
-    let display_text = use_state(String::from("Clicks: 0"));
+    let count = use_state(0);
+    
+    // Derived state automatically updates when `count` changes!
+    let double = use_memo(&count, |c| format!("Double: {}", c * 2));
+    let is_high = use_memo(&count, |c| if *c > 5 { "text-red-500" } else { "text-white" });
 
     let btn_count = count.clone();
-    let btn_text  = display_text.clone();
-
-    let handle_click = move |_e| {
-        let next = btn_count.get() + 1;
-        btn_count.set(next);
-        btn_text.set(format!("Clicks: {}", next));
-    };
+    let handle_click = move |_e| btn_count.set(btn_count.get() + 1);
 
     rsx!(
-        <div class="counter-box">
-            <h2 bind_text={display_text}></h2>
+        <div class="p-4 border rounded">
+            <h2 bind_attr:class={is_high} bind_text={double}></h2>
             <button on_click={handle_click}>"Increment"</button>
         </div>
     )
 }
-```
-
-### Single Page Routing
-```rust
-use oxirast_core::{Router, Signal, VNode};
+Enterprise Routing & GuardsProtect routes and parse dynamic URLs instantly.Rustuse oxirast_core::{Router, Signal, use_params, use_query, VNode};
 use oxirast_parser::rsx;
 
-#[allow(non_snake_case)]
-pub fn Home(nav: Signal<String>) -> VNode {
-    let nav_clone = nav.clone();
-    let go_about = move |_| nav_clone.set(String::from("/about"));
-
-    rsx!(
-        <div>
-            <h1>"Home Page"</h1>
-            <button on_click={go_about}>"Go to About"</button>
-        </div>
-    )
-}
+// Fake auth check
+fn is_authenticated() -> bool { true }
 
 #[wasm_bindgen::prelude::wasm_bindgen(start)]
 pub fn main() {
     Router::new("root")
-        .route("/",      Home)
-        .route("/about", About)
+        .route("/", Home)
+        .route("/login", Login)
+        // Redirects to /login if is_authenticated() returns false
+        .guarded_route("/dashboard/:id", Dashboard, is_authenticated, "/login")
         .start();
 }
-```
 
----
+#[allow(non_snake_case)]
+pub fn Dashboard(nav: Signal<String>) -> VNode {
+    let user_id = use_params().get("id").cloned().unwrap_or_default();
+    let theme = use_query().get("theme").cloned().unwrap_or_default();
 
-## `Cargo.toml` Dependencies
+    rsx!(
+        <div>
+            <h1>"Welcome User: "{user_id}</h1>
+            <p>"Current Theme: "{theme}</p>
+        </div>
+    )
+}
+Web3 Wallet Integration (Zero JS required)Connect to Solana or Ethereum natively from Rust.Rustuse oxirast_core::{use_wallet, use_memo, VNode};
+use oxirast_parser::rsx;
 
-Add the following to your project's `Cargo.toml`:
-```toml
-[dependencies]
-oxirast-core   = "0.1.1"
-oxirast-parser = "0.1.1"
+#[allow(non_snake_case)]
+pub fn Web3Connect() -> VNode {
+    // Built in support for "solana" (Phantom) or "ethereum" (MetaMask)
+    let (wallet_address, is_connecting, connect_wallet) = use_wallet("solana"); 
+
+    let display_text = use_memo(&wallet_address, |addr| {
+        match addr {
+            Some(a) => format!("Connected: {}...", &a[0..6]),
+            None => String::from("Not Connected"),
+        }
+    });
+
+    rsx!(
+        <div class="web3-card">
+            <h2 bind_text={display_text}></h2>
+            <button bind_attr:disabled={is_connecting} on_click={move |_| connect_wallet()}>
+                "Connect Wallet"
+            </button>
+        </div>
+    )
+}
+📦 Cargo.toml DependenciesAdd the following to your project's Cargo.toml:Ini, TOML[dependencies]
+oxirast-core   = "1.0.0"
+oxirast-parser = "1.0.0"
 wasm-bindgen   = "0.2"
 
 [lib]
 crate-type = ["cdylib"]
-```
-
----
-
-## Project Structure (Scaffolded App)
-```
-my_app/
-├── Cargo.toml
-├── Cargo.lock
-├── public/
-│   ├── index.html     # HTML shell — Oxirast mounts into <div id="root">
-│   └── style.css      # Global styles
-└── src/
-    ├── lib.rs         # Entry point & Router configuration
-    └── pages/
-        ├── home.rs
-        └── about.rs
-```
-
----
-
-## Roadmap
-
-- [x] `Signal<T>` fine-grained reactivity
-- [x] `rsx!` macro — HTML-like declarative UI
-- [x] `bind_text` directive
-- [x] `on_*` event listener attributes
-- [x] Client-side SPA Router with History API
-- [x] `use_state` / `use_fetch` hooks
-- [x] Context API (`provide_context` / `use_context`)
-- [x] Automatic Wasm-to-JS GC (memory reaper)
-- [x] Zero-config CLI (`init` + `serve`)
-- [ ] `oxirast-cli build` — optimised release builds with `wasm-opt`
-- [ ] `oxirast-cli clean`
-- [ ] `--template` flag for `init`
-- [ ] `oxirast.toml` project configuration
-- [ ] Server-Side Rendering (SSR)
-- [ ] Component hot-module replacement (HMR)
-- [ ] `bind_attr` directive for reactive HTML attributes
-
----
-
-## Contributing
-
-Contributions are welcome. Please open an issue first to discuss any significant changes.
-
-1. Fork the repository
-2. Create a feature branch — `git checkout -b feat/your-feature`
-3. Commit your changes — `git commit -m "feat: add your feature"`
-4. Push to the branch — `git push origin feat/your-feature`
-5. Open a Pull Request
-
----
-
-## License
-
-MIT License © [Michael (kinuthia)](https://mkportifolio.netlify.app)
-
-See [LICENSE](LICENSE) for the full text.
-
----
-
-<div align="center">
-  <sub>Built with 🦀 Rust · Compiled to WebAssembly · Designed for the modern web</sub>
-</div>
+🗺️ Roadmap (What's Next for v2.0)[x] Signal<T> fine-grained reactivity[x] Client-side SPA Router with Route Guards & Dynamic Params[x] oxirast-cli build — optimised release builds with wasm-opt[x] oxirast-cli audit — supply chain zero-day protection[x] --template tailwind and auto-compilation[x] Server-Side Rendering (SSR) & True Hydration[x] Error Boundaries (Crash Protection)[x] Web3 Wallet Integration[ ] Type-Safe RPC Bridge: Seamlessly share Rust Struct definitions between your Axum backend and Oxirast frontend.[ ] Component Hot-Module Replacement (HMR) (Currently supports fast Live-Reload)🤝 ContributingContributions are welcome. Please open an issue first to discuss any significant changes.Fork the repositoryCreate a feature branch — git checkout -b feat/your-featureCommit your changes — git commit -m "feat: add your feature"Push to the branch — git push origin feat/your-featureOpen a Pull Request📄 LicenseMIT License © Michael KinuthiaSee LICENSE for the full text.<div align="center"><sub>Built with 🦀 Rust · Compiled to WebAssembly · Designed for the modern web</sub></div>
