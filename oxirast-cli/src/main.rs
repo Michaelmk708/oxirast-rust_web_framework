@@ -12,24 +12,41 @@ use tokio::sync::broadcast;
 use tower_http::services::ServeDir;
 
 // ==========================================
-// CONFIGURATION ENGINE (Reads oxirast.toml)
+// ENVIRONMENT VERIFICATION ENGINE
+// ==========================================
+fn ensure_environment() {
+    // 1. Check if Wasm target is installed
+    let target_check = Command::new("rustup").args(["target", "list", "--installed"]).output();
+    if let Ok(output) = target_check {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if !stdout.contains("wasm32-unknown-unknown") {
+            println!("🔧 Installing WebAssembly target (wasm32-unknown-unknown)...");
+            let _ = Command::new("rustup").args(["target", "add", "wasm32-unknown-unknown"]).status();
+        }
+    }
+
+    // 2. Check if wasm-bindgen-cli is installed
+    let bindgen_check = Command::new("wasm-bindgen").arg("--version").output();
+    if bindgen_check.is_err() {
+        println!("🔧 Installing wasm-bindgen-cli (this might take a minute)...");
+        let _ = Command::new("cargo").args(["install", "wasm-bindgen-cli"]).status();
+    }
+}
+
+// ==========================================
+// CONFIGURATION ENGINE
 // ==========================================
 fn get_config_port() -> u16 {
     if let Ok(config) = fs::read_to_string("oxirast.toml") {
         for line in config.lines() {
             if line.trim().starts_with("port =") {
-                if let Some(port_str) = line.split('=').nth(1) {
-                    return port_str.trim().parse().unwrap_or(3000);
-                }
+                if let Some(port_str) = line.split('=').nth(1) { return port_str.trim().parse().unwrap_or(3000); }
             }
         }
     }
-    3000 // Default fallback
+    3000 
 }
 
-// ==========================================
-// PILLAR 2: Aggressive Content Security Policy
-// ==========================================
 const INDEX_HTML: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
@@ -41,136 +58,80 @@ const INDEX_HTML: &str = r#"
 </head>
 <body>
     <div id="root"></div>
-
     <script type="module">
         import init from '/dist/app.js';
-        
-        init().then(() => {
-            console.log("🚀 Oxirast Framework Initialized!");
-        });
-
+        init().then(() => { console.log("🚀 Oxirast Framework Initialized!"); });
         const port = window.location.port || "3000";
         const ws = new WebSocket(`ws://localhost:${port}/ws`);
-        ws.onmessage = (event) => {
-            if (event.data === "RELOAD") {
-                console.log("♻️ File changed! Reloading...");
-                window.location.reload();
-            }
-        };
+        ws.onmessage = (event) => { if (event.data === "RELOAD") window.location.reload(); };
     </script>
 </body>
 </html>
 "#;
 
-// ==========================================
-// PILLAR 4: Security Audit Engine
-// ==========================================
 fn audit_project() -> bool {
     println!("🛡️  Running Security Audit (cargo audit)...");
     let status = Command::new("cargo").arg("audit").status();
-    
     match status {
-        Ok(s) if s.success() => {
-            println!("✅ Security Audit passed! Zero vulnerabilities detected.");
-            true
-        }
-        Ok(_) => {
-            println!("❌ SECURITY ALERT: Vulnerabilities found in dependencies! Check Cargo.lock.");
-            false 
-        }
-        Err(_) => {
-            println!("⚠️  'cargo-audit' is not installed. Run 'cargo install cargo-audit' for zero-day protection.");
-            true 
-        }
+        Ok(s) if s.success() => { println!("✅ Security Audit passed!"); true }
+        Ok(_) => { println!("❌ SECURITY ALERT: Vulnerabilities found in Cargo.lock."); false }
+        Err(_) => { println!("⚠️  'cargo-audit' is not installed."); true }
     }
 }
 
-// ==========================================
-// TESTING ENGINE (Headless Wasm)
-// ==========================================
 fn test_project() {
     println!("🧪 Running Headless WebAssembly Tests...");
-    let status = Command::new("cargo")
-        .args(["test", "--target", "wasm32-unknown-unknown"])
-        .status();
-        
+    let status = Command::new("cargo").args(["test", "--target", "wasm32-unknown-unknown"]).status();
     match status {
-        Ok(s) if s.success() => println!("✅ All Oxirast tests passed!"),
-        _ => println!("❌ Tests failed. Make sure you have 'wasm-bindgen-test' configured."),
+        Ok(s) if s.success() => println!("✅ All tests passed!"),
+        _ => println!("❌ Tests failed."),
     }
 }
 
-// ==========================================
-// BUILD ENGINE (With Tailwind Auto-Detect)
-// ==========================================
 fn build_project(is_release: bool) {
-    if is_release {
-        println!("🚀 Compiling highly optimized Oxirast App for PRODUCTION...");
-    } else {
-        println!("⚙️  Compiling Oxirast App for DEVELOPMENT...");
-    }
+    if is_release { println!("🚀 Compiling highly optimized Oxirast App for PRODUCTION..."); } 
+    else { println!("⚙️  Compiling Oxirast App for DEVELOPMENT..."); }
     
-    // --- TAILWIND CSS AUTO-COMPILER ---
     if Path::new("tailwind.config.js").exists() {
         println!("🎨 Tailwind CSS detected! Compiling styles...");
         let mut tailwind_args = vec!["tailwindcss", "-i", "public/input.css", "-o", "public/style.css"];
         if is_release { tailwind_args.push("--minify"); }
-        
         let _ = Command::new("npx").args(&tailwind_args).status();
     }
 
     let mut cargo_args = vec!["build", "--target", "wasm32-unknown-unknown"];
     if is_release { cargo_args.push("--release"); }
 
-    let build_status = Command::new("cargo").args(&cargo_args).status().expect("Failed to run cargo build");
+    let build_status = Command::new("cargo").args(&cargo_args).status().expect("Failed to build");
 
     if build_status.success() {
         println!("📦 Generating JavaScript bindings...");
-        
-        let cargo_toml = fs::read_to_string("Cargo.toml").expect("Cargo.toml not found!");
+        let cargo_toml = fs::read_to_string("Cargo.toml").unwrap_or_default();
         let mut proj_name = String::new();
         for line in cargo_toml.lines() {
-            if line.trim().starts_with("name =") {
-                proj_name = line.split('"').nth(1).unwrap_or("").replace("-", "_");
-                break;
-            }
+            if line.trim().starts_with("name =") { proj_name = line.split('"').nth(1).unwrap_or("").replace("-", "_"); break; }
         }
         
         let target_dir = if is_release { "release" } else { "debug" };
         let wasm_path = format!("target/wasm32-unknown-unknown/{}/{}.wasm", target_dir, proj_name);
 
-        let bindgen_output = Command::new("wasm-bindgen")
-            .args(["--out-dir", "dist", "--out-name", "app", "--target", "web", "--no-typescript", &wasm_path ])
-            .output()
-            .expect("Failed to execute wasm-bindgen tool.");
+        let bindgen_output = Command::new("wasm-bindgen").args(["--out-dir", "dist", "--out-name", "app", "--target", "web", "--no-typescript", &wasm_path ]).output().unwrap();
             
         if bindgen_output.status.success() {
             println!("✅ JavaScript bindings generated in /dist");
-
             if is_release {
-                println!("🗜️ Optimizing WebAssembly binary size (wasm-opt)...");
+                println!("🗜️ Optimizing WebAssembly binary...");
                 let opt_status = Command::new("wasm-opt").args(["-Oz", "-o", "dist/app_bg.wasm", "dist/app_bg.wasm"]).status();
-                match opt_status {
-                    Ok(s) if s.success() => println!("✅ Wasm optimization complete!"),
-                    _ => println!("⚠️  'wasm-opt' not found or failed. Install binaryen for smaller builds."),
-                }
+                if opt_status.is_ok() && opt_status.unwrap().success() { println!("✅ Wasm optimization complete!"); }
             }
-        } else {
-            println!("❌ wasm-bindgen failed!\n{}", String::from_utf8_lossy(&bindgen_output.stderr));
-        }
-    } else {
-        println!("❌ Cargo build failed. Check your Rust code.");
-    }
+        } else { println!("❌ wasm-bindgen failed!\n{}", String::from_utf8_lossy(&bindgen_output.stderr)); }
+    } else { println!("❌ Cargo build failed."); }
 }
 
-// ==========================================
-// CLEAN ENGINE
-// ==========================================
 fn clean_project() {
-    println!("🧹 Cleaning Oxirast project...");
+    println!("🧹 Cleaning project...");
     let _ = Command::new("cargo").arg("clean").status();
     if Path::new("dist").exists() { fs::remove_dir_all("dist").unwrap(); }
-    println!("✅ Clean complete.");
 }
 
 async fn disable_cache(request: Request, next: Next) -> Response {
@@ -180,7 +141,7 @@ async fn disable_cache(request: Request, next: Next) -> Response {
 }
 
 // ==========================================
-// THE SCAFFOLDING ENGINE (With Tailwind Support)
+// THE SCAFFOLDING ENGINE
 // ==========================================
 fn scaffold_project(project_name: &str, template: &str) {
     println!("🚀 Initializing new Oxirast project: {} (Template: {})", project_name, template);
@@ -198,8 +159,8 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-oxirast-core = "0.1.0"
-oxirast-parser = "0.1.0"
+oxirast-core = "1.0.1"
+oxirast-parser = "1.0.0"
 wasm-bindgen = "0.2"
 serde = {{ version = "1.0", features = ["derive"] }}
 "#, project_name);
@@ -220,14 +181,8 @@ port = 3000
     fs::write(format!("{}/oxirast.toml", project_name), oxirast_toml).unwrap();
 
     if template == "tailwind" {
-        // Generate Tailwind Configuration
-        fs::write(format!("{}/tailwind.config.js", project_name), 
-            "module.exports = { content: ['./src/**/*.rs', './public/index.html'], theme: { extend: {} }, plugins: [], }"
-        ).unwrap();
-        
-        fs::write(format!("{}/public/input.css", project_name), 
-            "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\nbody { @apply bg-zinc-950 text-white flex items-center justify-center h-screen; }"
-        ).unwrap();
+        fs::write(format!("{}/tailwind.config.js", project_name), "module.exports = { content: ['./src/**/*.rs', './public/index.html'], theme: { extend: {} }, plugins: [], }").unwrap();
+        fs::write(format!("{}/public/input.css", project_name), "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\nbody { @apply bg-zinc-950 text-white flex items-center justify-center h-screen; }").unwrap();
 
         let lib_rs = r#"use oxirast_core::{mount_to_body, render_vnode, VNode};
 use oxirast_parser::rsx;
@@ -242,26 +197,29 @@ pub fn App() -> VNode {
         </div>
     )
 }
-
 #[wasm_bindgen::prelude::wasm_bindgen(start)]
 pub fn main() { mount_to_body(&render_vnode(&App())); }
 "#;
         fs::write(format!("{}/src/lib.rs", project_name), lib_rs).unwrap();
+
+        println!("📦 Installing Tailwind CSS via npm...");
+        let _ = Command::new("npm").arg("init").arg("-y").current_dir(project_name).status();
+        let _ = Command::new("npm").args(["install", "-D", "tailwindcss"]).current_dir(project_name).status();
+
     } else {
-        // Default Template
         let lib_rs = r#"use oxirast_core::{mount_to_body, render_vnode, VNode};
 use oxirast_parser::rsx;
-
 #[allow(non_snake_case)]
 pub fn App() -> VNode { rsx!( <div class="container"><h1>"Welcome to Oxirast"</h1></div> ) }
-
 #[wasm_bindgen::prelude::wasm_bindgen(start)]
 pub fn main() { mount_to_body(&render_vnode(&App())); }
 "#;
         fs::write(format!("{}/src/lib.rs", project_name), lib_rs).unwrap();
-        let index_css = r#"body { font-family: system-ui; background: #090b11; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; }"#;
-        fs::write(format!("{}/public/style.css", project_name), index_css).unwrap();
+        fs::write(format!("{}/public/style.css", project_name), r#"body { font-family: system-ui; background: #090b11; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; }"#).unwrap();
     }
+
+    println!("🌱 Initializing Git repository...");
+    let _ = Command::new("git").arg("init").current_dir(project_name).status();
 
     println!("✅ Project {} created successfully!", project_name);
 }
@@ -272,6 +230,10 @@ async fn main() {
     
     if args.len() >= 2 {
         match args[1].as_str() {
+            "--version" | "-v" | "version" => {
+                println!("oxirast-cli v{}", env!("CARGO_PKG_VERSION"));
+                return;
+            }
             "init" => {
                 let name = if args.len() >= 3 { &args[2] } else { "oxirast_app" };
                 let mut template = "default";
@@ -280,16 +242,19 @@ async fn main() {
                 return;
             }
             "build" => {
+                ensure_environment();
                 if audit_project() { build_project(true); }
                 return;
             }
             "clean" => { clean_project(); return; }
             "audit" => { audit_project(); return; }
             "test"  => { test_project(); return; }
-            "serve" | _ => {} 
+            "serve" => {} 
+            _ => { println!("Unknown command. Try: init, build, serve, clean, audit, test, or --version"); return; }
         }
     }
 
+    ensure_environment();
     let port = get_config_port();
     println!("🔥 Starting Oxirast Dev Server on port {}...", port);
 

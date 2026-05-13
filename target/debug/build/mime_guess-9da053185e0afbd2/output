@@ -1,1 +1,0 @@
-cargo:rustc-env=MIME_TYPES_GENERATED_PATH=/home/michael/Desktop/oxirast/target/debug/build/mime_guess-9da053185e0afbd2/out/mime_types_generated.rs

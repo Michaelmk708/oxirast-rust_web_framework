@@ -1009,7 +1009,7 @@ dependencies = [
 
 [[package]]
 name = "oxirast-cli"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "axum",
  "futures",
@@ -1020,7 +1020,7 @@ dependencies = [
 
 [[package]]
 name = "oxirast-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "reqwest",
  "serde",

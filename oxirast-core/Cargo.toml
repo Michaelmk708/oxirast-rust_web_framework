@@ -3,7 +3,7 @@ name = "oxirast-core"
 description = "A fast, fine-grained WebAssembly frontend framework for Rust."
 license = "MIT"
 repository = "https://github.com/Michaelmk708/oxirast-rust_web_framework"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 authors = ["Michael Kinuthia <michaelkinuthia708@gmail.com>"]
 readme = "../README.md" 
@@ -31,5 +31,6 @@ features = [
     "Text",
     "History",  
     "Location", 
-    "console",  
+    "console",
+    "CssStyleDeclaration" 
 ]
