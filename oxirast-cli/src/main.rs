@@ -15,7 +15,6 @@ use tower_http::services::ServeDir;
 // ENVIRONMENT VERIFICATION ENGINE
 // ==========================================
 fn ensure_environment() {
-    // 1. Check if Wasm target is installed
     let target_check = Command::new("rustup").args(["target", "list", "--installed"]).output();
     if let Ok(output) = target_check {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -25,7 +24,6 @@ fn ensure_environment() {
         }
     }
 
-    // 2. Check if wasm-bindgen-cli is installed
     let bindgen_check = Command::new("wasm-bindgen").arg("--version").output();
     if bindgen_check.is_err() {
         println!("🔧 Installing wasm-bindgen-cli (this might take a minute)...");
@@ -33,9 +31,6 @@ fn ensure_environment() {
     }
 }
 
-// ==========================================
-// CONFIGURATION ENGINE
-// ==========================================
 fn get_config_port() -> u16 {
     if let Ok(config) = fs::read_to_string("oxirast.toml") {
         for line in config.lines() {
@@ -46,28 +41,6 @@ fn get_config_port() -> u16 {
     }
     3000 
 }
-
-const INDEX_HTML: &str = r#"
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Oxirast App</title>
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' ws://localhost:*; style-src 'self' 'unsafe-inline';">
-    <link rel="stylesheet" href="/public/style.css">
-</head>
-<body>
-    <div id="root"></div>
-    <script type="module">
-        import init from '/dist/app.js';
-        init().then(() => { console.log("🚀 Oxirast Framework Initialized!"); });
-        const port = window.location.port || "3000";
-        const ws = new WebSocket(`ws://localhost:${port}/ws`);
-        ws.onmessage = (event) => { if (event.data === "RELOAD") window.location.reload(); };
-    </script>
-</body>
-</html>
-"#;
 
 fn audit_project() -> bool {
     println!("🛡️  Running Security Audit (cargo audit)...");
@@ -88,17 +61,42 @@ fn test_project() {
     }
 }
 
+// ==========================================
+// THE PACKAGING ENGINE (STATIC EXPORT)
+// ==========================================
 fn build_project(is_release: bool) {
     if is_release { println!("🚀 Compiling highly optimized Oxirast App for PRODUCTION..."); } 
     else { println!("⚙️  Compiling Oxirast App for DEVELOPMENT..."); }
     
+    // Ensure dist directory exists for static export
+    fs::create_dir_all("dist").unwrap();
+
+    // 1. Process HTML: Inject WebSocket ONLY in development mode
+    let mut html_content = fs::read_to_string("public/index.html").unwrap_or_else(|_| "<h1>Error missing public/index.html</h1>".to_string());
+    
+    if !is_release {
+        let ws_script = r#"
+    <script>
+        const port = window.location.port || "3000";
+        const ws = new WebSocket(`ws://localhost:${port}/ws`);
+        ws.onmessage = (event) => { if (event.data === "RELOAD") window.location.reload(); };
+    </script>"#;
+        html_content = html_content.replace("</body>", &format!("{}\n</body>", ws_script));
+    }
+    // Write the final HTML directly into the dist folder
+    fs::write("dist/index.html", html_content).unwrap();
+
+    // 2. Process CSS: Compile Tailwind directly into dist folder
     if Path::new("tailwind.config.js").exists() {
-        println!("🎨 Tailwind CSS detected! Compiling styles...");
-        let mut tailwind_args = vec!["tailwindcss", "-i", "public/input.css", "-o", "public/style.css"];
+        println!("🎨 Tailwind CSS detected! Compiling styles into /dist...");
+        let mut tailwind_args = vec!["tailwindcss", "-i", "public/input.css", "-o", "dist/style.css"];
         if is_release { tailwind_args.push("--minify"); }
         let _ = Command::new("npx").args(&tailwind_args).status();
+    } else if Path::new("public/style.css").exists() {
+        fs::copy("public/style.css", "dist/style.css").unwrap();
     }
 
+    // 3. Process Rust: Compile WebAssembly
     let mut cargo_args = vec!["build", "--target", "wasm32-unknown-unknown"];
     if is_release { cargo_args.push("--release"); }
 
@@ -124,6 +122,7 @@ fn build_project(is_release: bool) {
                 let opt_status = Command::new("wasm-opt").args(["-Oz", "-o", "dist/app_bg.wasm", "dist/app_bg.wasm"]).status();
                 if opt_status.is_ok() && opt_status.unwrap().success() { println!("✅ Wasm optimization complete!"); }
             }
+            println!("🎉 Build complete! The /dist folder is ready for deployment.");
         } else { println!("❌ wasm-bindgen failed!\n{}", String::from_utf8_lossy(&bindgen_output.stderr)); }
     } else { println!("❌ Cargo build failed."); }
 }
@@ -148,6 +147,26 @@ fn scaffold_project(project_name: &str, template: &str) {
 
     fs::create_dir_all(format!("{}/src/pages", project_name)).unwrap();
     fs::create_dir_all(format!("{}/public/assets", project_name)).unwrap();
+
+    // 1. Generate standard public/index.html (Strict CSP, Production Ready)
+    let index_html = r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oxirast App</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' ws://localhost:*; style-src 'self' 'unsafe-inline';">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module">
+        import init from '/app.js';
+        init().then(() => { console.log("🚀 Oxirast Framework Initialized!"); });
+    </script>
+</body>
+</html>"#;
+    fs::write(format!("{}/public/index.html", project_name), index_html).unwrap();
 
     let cargo_toml = format!(
 r#"[package]
@@ -182,7 +201,7 @@ port = 3000
 
     if template == "tailwind" {
         fs::write(format!("{}/tailwind.config.js", project_name), "module.exports = { content: ['./src/**/*.rs', './public/index.html'], theme: { extend: {} }, plugins: [], }").unwrap();
-        fs::write(format!("{}/public/input.css", project_name), "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\nbody { @apply bg-zinc-950 text-white flex items-center justify-center h-screen; }").unwrap();
+        fs::write(format!("{}/public/input.css", project_name), "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\nbody { @apply bg-zinc-950 text-white flex items-center justify-center min-h-screen; }").unwrap();
 
         let lib_rs = r#"use oxirast_core::{mount_to_body, render_vnode, VNode};
 use oxirast_parser::rsx;
@@ -280,11 +299,14 @@ async fn main() {
         loop { tokio::time::sleep(std::time::Duration::from_secs(1)).await; }
     });
 
+    // 4. The Server Engine is now unified! Everything lives in /dist.
     let app = Router::new()
         .route("/ws", get(ws_handler))
-        .nest_service("/dist", ServeDir::new("dist"))
-        .nest_service("/public", ServeDir::new("public")) 
-        .fallback(get(|| async { Html(INDEX_HTML) }))
+        .nest_service("/", ServeDir::new("dist")) // Serve directly from the unified folder
+        .fallback(get(|| async { 
+            // SPA Routing: If it's a 404, serve the dist/index.html
+            Html(fs::read_to_string("dist/index.html").unwrap_or_default()) 
+        }))
         .layer(middleware::from_fn(disable_cache)) 
         .with_state(app_state);
 
