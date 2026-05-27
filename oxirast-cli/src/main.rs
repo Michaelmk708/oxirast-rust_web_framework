@@ -43,12 +43,29 @@ fn get_config_port() -> u16 {
 }
 
 fn audit_project() -> bool {
+    // 1. Silently check if cargo-audit is installed
+    let check = Command::new("cargo").args(["audit", "--version"]).output();
+    
+    if check.is_err() || !String::from_utf8_lossy(&check.unwrap().stdout).contains("cargo-audit") {
+        // Graceful degradation: Warn the user, but DO NOT fail the build.
+        println!("⚠️  'cargo-audit' is not installed. Skipping security check.");
+        println!("💡 Tip: Run `cargo install cargo-audit` to enable zero-day protection.");
+        return true; 
+    }
+
+    // 2. If it is installed, run the actual audit
     println!("🛡️  Running Security Audit (cargo audit)...");
     let status = Command::new("cargo").arg("audit").status();
+    
     match status {
-        Ok(s) if s.success() => { println!("✅ Security Audit passed!"); true }
-        Ok(_) => { println!("❌ SECURITY ALERT: Vulnerabilities found in Cargo.lock."); false }
-        Err(_) => { println!("⚠️  'cargo-audit' is not installed."); true }
+        Ok(s) if s.success() => { 
+            println!("✅ Security Audit passed!"); 
+            true 
+        }
+        _ => { 
+            println!("❌ SECURITY ALERT: Vulnerabilities found in Cargo.lock."); 
+            false 
+        }
     }
 }
 
@@ -86,10 +103,10 @@ fn build_project(is_release: bool) {
     // Write the final HTML directly into the dist folder
     fs::write("dist/index.html", html_content).unwrap();
 
-    // 2. Process CSS: Compile Tailwind directly into dist folder
+    // 2. Process CSS: Compile Tailwind directly into dist folder with --yes flag
     if Path::new("tailwind.config.js").exists() {
         println!("🎨 Tailwind CSS detected! Compiling styles into /dist...");
-        let mut tailwind_args = vec!["tailwindcss", "-i", "public/input.css", "-o", "dist/style.css"];
+        let mut tailwind_args = vec!["--yes", "tailwindcss", "-i", "public/input.css", "-o", "dist/style.css"];
         if is_release { tailwind_args.push("--minify"); }
         let _ = Command::new("npx").args(&tailwind_args).status();
     } else if Path::new("public/style.css").exists() {
